@@ -1,4 +1,4 @@
-package net.minecraftforge.mercurius.Helpers;
+package net.minecraftforge.mercurius.stub;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
