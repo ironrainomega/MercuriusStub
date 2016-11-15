@@ -103,7 +103,38 @@ public class StatsModStub
         if (loadedMercurius != null)
         {
             try {
+                // In dev env, postInit actually calls into obfuscation functions...
                 ReflectionHelper.findMethod(loadedMercurius, loadedMercuriusInstance, new String[] {"postInit"}, e.getClass()).invoke(loadedMercuriusInstance, e);
+            } catch (IllegalAccessException e1) {
+                e1.printStackTrace();
+            } catch (InvocationTargetException e1) {
+                e1.printStackTrace();
+            }
+        }
+    }
+
+    @EventHandler
+    public void serverStarting(FMLServerStartingEvent e)
+    {
+        if (loadedMercurius != null)
+        {
+            try {
+                ReflectionHelper.findMethod(loadedMercurius, loadedMercuriusInstance, new String[] {"serverStarting"}, e.getClass()).invoke(loadedMercuriusInstance, e);
+            } catch (IllegalAccessException e1) {
+                e1.printStackTrace();
+            } catch (InvocationTargetException e1) {
+                e1.printStackTrace();
+            }
+        }
+    }
+
+    @EventHandler
+    public void serverStopping(FMLServerStoppingEvent e)
+    {
+        if (loadedMercurius != null)
+        {
+            try {
+                ReflectionHelper.findMethod(loadedMercurius, loadedMercuriusInstance, new String[] {"serverStopping"}, e.getClass()).invoke(loadedMercuriusInstance, e);
             } catch (IllegalAccessException e1) {
                 e1.printStackTrace();
             } catch (InvocationTargetException e1) {
