@@ -1,17 +1,17 @@
 package net.minecraftforge.mercurius;
 
 import akka.util.Reflect;
+import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventHandler;
-import net.minecraftforge.fml.common.event.FMLInitializationEvent;
-import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
-import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import net.minecraftforge.fml.common.event.*;
 import net.minecraftforge.fml.relauncher.ReflectionHelper;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.mercurius.Helpers.DataHelper;
 import net.minecraftforge.mercurius.Helpers.HttpDownloadHelper;
 import net.minecraftforge.mercurius.Helpers.LogHelper;
 
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -68,11 +68,12 @@ public class StatsModStub
 
         URLClassLoader cl;
         try {
-            cl = URLClassLoader.newInstance(new URL[] {mercuriusFile.toURL()});
+            cl = URLClassLoader.newInstance(new URL[] {mercuriusFile.toURL()}, StatsModStub.class.getClassLoader());
             loadedMercurius = cl.loadClass("net.minecraftforge.mercurius.StatsMod");
             loadedMercuriusInstance = loadedMercurius.newInstance();
 
-            getMethod(loadedMercurius, "preInit").invoke(loadedMercuriusInstance, (Object)e);
+            //getMethod("preInit").invoke(loadedMercuriusInstance, (Object)e);
+            ReflectionHelper.findMethod(loadedMercurius, loadedMercuriusInstance, new String[] {"preInit"}, e.getClass()).invoke(loadedMercuriusInstance, e);
 
             LogHelper.info("aaa");
 
@@ -82,14 +83,33 @@ public class StatsModStub
     }
 
     @EventHandler
-    public void init(FMLInitializationEvent event)
+    public void init(FMLInitializationEvent e)
     {
+        if (loadedMercurius != null)
+        {
+            try {
+                ReflectionHelper.findMethod(loadedMercurius, loadedMercuriusInstance, new String[] {"init"}, e.getClass()).invoke(loadedMercuriusInstance, e);
+            } catch (IllegalAccessException e1) {
+                e1.printStackTrace();
+            } catch (InvocationTargetException e1) {
+                e1.printStackTrace();
+            }
 
+        }
     }
 
     @EventHandler
     public void postInit(FMLPostInitializationEvent e) {
-
+        if (loadedMercurius != null)
+        {
+            try {
+                ReflectionHelper.findMethod(loadedMercurius, loadedMercuriusInstance, new String[] {"postInit"}, e.getClass()).invoke(loadedMercuriusInstance, e);
+            } catch (IllegalAccessException e1) {
+                e1.printStackTrace();
+            } catch (InvocationTargetException e1) {
+                e1.printStackTrace();
+            }
+        }
     }
 
     private boolean downloadFile(String localDir)
@@ -107,18 +127,5 @@ public class StatsModStub
             e.printStackTrace();
             return false;
         }
-    }
-
-    private Method getMethod(Class loadedClass, String className)
-    {
-        for(Method m : loadedClass.getMethods()) {
-            if(m.getName().equals(className))
-            {
-                m.setAccessible(true);
-                return m;
-            }
-        }
-
-        return null;
     }
 }
