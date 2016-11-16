@@ -1,78 +1,188 @@
-buildscript {
-    repositories {
-        jcenter()
-        maven { url = "http://files.minecraftforge.net/maven" }
-    }
-    dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:2.2-SNAPSHOT'
-    }
-}
-apply plugin: 'net.minecraftforge.gradle.forge'
-//Only edit below this line, the above code adds and enables the nessasary things for Forge to be setup.
-
-
-version = "1.0"
-group= "com.yourname.modid" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
-archivesBaseName = "modid"
-
-sourceCompatibility = targetCompatibility = "1.6" // Need this here so eclipse task generates correctly.
-compileJava {
-    sourceCompatibility = targetCompatibility = "1.6"
+subprojects {
+    version = "1.0" //Make warning shut up
 }
 
-minecraft {
-    version = "1.10.2-12.18.2.2125"
-    runDir = "run"
-    
-    // the mappings can be changed at any time, and must be in the following format.
-    // snapshot_YYYYMMDD   snapshot are built nightly.
-    // stable_#            stables are built at the discretion of the MCP team.
-    // Use non-default mappings at your own risk. they may not allways work.
-    // simply re-run your setup task after changing the mappings to update your workspace.
-    mappings = "snapshot_20161111"
-    // makeObfSourceJar = false // an Srg named sources jar is made by default. uncomment this to disable.
-}
+//TODO: Have a cross MC version code folder?
 
-dependencies {
-    // you may put jars on which you depend on in ./libs
-    // or you may define them like so..
-    //compile "some.group:artifact:version:classifier"
-    //compile "some.group:artifact:version"
-      
-    // real examples
-    //compile 'com.mod-buildcraft:buildcraft:6.0.8:dev'  // adds buildcraft to the dev env
-    //compile 'com.googlecode.efficient-java-matrix-library:ejml:0.24' // adds ejml to the dev env
+evaluationDependsOnChildren() // gotta make sure the children happen first
 
-    // the 'provided' configuration is for optional dependencies that exist at compile-time but might not at runtime.
-    //provided 'com.mod-buildcraft:buildcraft:6.0.8:dev'
+apply plugin: 'java'
+apply plugin: 'eclipse'
+apply plugin: 'idea'
 
-    // the deobf configurations:  'deobfCompile' and 'deobfProvided' are the same as the normal compile and provided,
-    // except that these dependencies get remapped to your current MCP mappings
-    //deobfCompile 'com.mod-buildcraft:buildcraft:6.0.8:dev'
-    //deobfProvided 'com.mod-buildcraft:buildcraft:6.0.8:dev'
-
-    // for more info...
-    // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
-    // http://www.gradle.org/docs/current/userguide/dependency_management.html
-
-}
-
-processResources
+version = "1.0.1"
+if (project.hasProperty('addBuildVersion'))
 {
-    // this will ensure that this task is redone when the versions change.
-    inputs.property "version", project.version
-    inputs.property "mcversion", project.minecraft.version
+    def bn = System.getenv("BUILD_NUMBER") ?: project.ext.properties.buildNumber ?: 0;
+    if (bn == 0)
+        throw new RuntimeException("Attempted to add build but used no build number!")
+    version = version + "." + bn
+}
 
-    // replace stuff in mcmod.info, nothing else
-    from(sourceSets.main.resources.srcDirs) {
-        include 'mcmod.info'
-                
-        // replace version and mcversion
-        expand 'version':project.version, 'mcversion':project.minecraft.version
+allprojects {
+    group = "net.minecraftforge"
+    archivesBaseName = "MercuriusStub"
+    apply plugin: 'maven'
+}
+
+repositories {
+	mavenCentral()
+}
+    
+dependencies {
+	compile 'com.google.guava:guava:17.0' //Not sure how far back this goes.. need to check each dep for each mc version...
+    compile 'com.google.code.gson:gson:2.2.4'
+    compile 'org.apache.logging.log4j:log4j-api:2.0-beta9'
+}
+
+// easy setups
+task setupDecompWorkspace
+task setupDevWorkspace
+task setupCiWorkspace
+
+// configure subprojects
+subprojects {
+    version = minecraft.version  + "-" + rootProject.version    
+    
+    if (rootProject.hasProperty('forgeMavenPass') && !project.hasProperty('addBuildVersion')) { 
+                                                     //If we are uploading this to maven we should push it out as JUST the MC version so that
+                                                     // the launcher can auto-download it.
+        version = minecraft.version
     }
-        
-    // copy everything else, thats not the mcmod.info
-    from(sourceSets.main.resources.srcDirs) {
-        exclude 'mcmod.info'
+    
+    dependencies {
+        compile rootProject
     }
+    sourceSets.main.resources.srcDirs += rootProject.sourceSets.main.resources.srcDirs
+
+    jar {
+        duplicatesStrategy = 'exclude'
+        from rootProject.sourceSets.main.output
+    }
+    
+    task signJar(dependsOn: 'jar') {
+        onlyIf {
+            rootProject.hasProperty('jarsigner')
+        }
+
+        def jarsigner = [:];
+
+        if (rootProject.hasProperty('jarsigner'))
+            jarsigner = rootProject.jarsigner;
+    } << {
+        ant.signjar(jar: jar.archivePath,
+                alias: 'forge',
+                keystore: jarsigner.keystore,
+                storepass: jarsigner.storepass,
+                keypass: jarsigner.keypass)
+    }
+    uploadArchives.dependsOn signJar
+    build.dependsOn signJar
+
+    sourceJar {
+        duplicatesStrategy = 'exclude'
+        from rootProject.sourceSets.main.allSource
+    }
+    
+    def buildtxt = project.buildDir.absolutePath + '/libs/MercuriusStub-' + project.version + '-build_num.txt'
+    
+    task writeBuildNumber() {
+        onlyIf {
+            !project.hasProperty('addBuildVersion')
+        }
+    } << {
+        def bn = System.getenv("BUILD_NUMBER") ?: rootProject.ext.properties.buildNumber ?: 0;
+        new File(buildtxt).text =  minecraft.version  + '-' + rootProject.version + '.' + bn
+    }
+    uploadArchives.dependsOn writeBuildNumber
+    
+    artifacts {
+        archives sourceJar
+        if (!project.hasProperty('addBuildVersion'))
+            archives file(buildtxt)
+    }
+    
+    processResources
+    {
+        inputs.property "version", project.version
+        inputs.property "mcversion", project.minecraft.version
+
+        from(sourceSets.main.resources.srcDirs) {
+            include 'mcmod.info'
+            expand 'version':project.version, 'mcversion':project.minecraft.version
+        }
+
+        from(sourceSets.main.resources.srcDirs) {
+            exclude 'mcmod.info'
+        }
+    }
+    
+    uploadArchives {
+        repositories.mavenDeployer {
+
+            dependsOn 'build'
+
+            if (rootProject.hasProperty('forgeMavenPass'))
+            {
+                repository(url: "http://files.minecraftforge.net/maven/manage/upload") {
+                    authentication(userName: "forge", password: rootProject.getProperty('forgeMavenPass'))
+                }
+            }
+            else
+            {
+                repository(url: 'file://localhost/' + rootProject.file('repo').getAbsolutePath())
+            }
+
+            pom {
+                groupId = project.group
+                version = project.version
+                artifactId = project.archivesBaseName
+                project {
+                    name project.archivesBaseName
+                    packaging 'jar'
+                    description 'MercuriusStub Statistics Gathering Mod'
+                    url 'https://github.com/ironrainomega/MercuriusStub'
+
+                    scm {
+                        url 'https://github.com/ironrainomega/MercuriusStub'
+                        connection 'scm:git:git://github.com/ironrainomega/MercuriusStub.git'
+                        developerConnection 'scm:git:git@github.com/ironrainomega/MercuriusStub.git'
+                    }
+
+                    issueManagement {
+                        system 'github'
+                        url 'https://github.com/ironrainomega/MercuriusStub/issues'
+                    }
+
+                    licenses {
+                        license {
+                            name 'LGPL v2.1'
+                            url 'https://github.com/ironrainomega/MercuriusStub/blob/master/LICENSE.md'
+                            distribution 'repo'
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id 'LexManos'
+                            name 'Lex Manos'
+                            roles { role 'developer' }
+                        }
+                        developer {
+                            id 'TamasHenning'
+                            name 'Tamas Henning'
+                            roles { role 'developer' }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // task deps
+    rootProject.setupDecompWorkspace.dependsOn setupDecompWorkspace
+    rootProject.setupDevWorkspace.dependsOn setupDevWorkspace
+    rootProject.setupCiWorkspace.dependsOn setupCiWorkspace
+    rootProject.build.dependsOn build
+    rootProject.uploadArchives.dependsOn uploadArchives
 }
