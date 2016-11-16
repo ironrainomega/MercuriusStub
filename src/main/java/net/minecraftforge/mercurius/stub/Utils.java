@@ -250,8 +250,17 @@ public class Utils
 
     private static String getRemoteChecksum(String group, String artifact, String version)
     {
-        String path = group.replace('.', '/') + '/' + artifact + '/' + version + '/' + artifact + '-' + version + ".jar.sha1";
-        return downloadString(FORGE_MAVEN + path).replaceAll("\r?\n", "");
+        return getMavenText(group, artifact, version, null, ".jar.sha1");
+    }
+    //private static String getMavenText(String group, String artifact, String version)
+    //{
+    //    return Utils.getMavenText(group, artifact, version, null, null);
+    //}
+    private static String getMavenText(String group, String artifact, String version, String classifier, String ext)
+    {
+        String path = group.replace('.', '/') + '/' + artifact + '/' + version + '/' + artifact + '-' + version + (classifier == null ? "" : "-" + classifier) + (ext == null ? ".txt" : ext);
+        String ret = downloadString(FORGE_MAVEN + path);
+        return ret == null ? null : ret.replaceAll("\r?\n", "");
     }
     private static String downloadMavenFile(File file, String group, String artifact, String version)
     {
@@ -261,7 +270,8 @@ public class Utils
 
     public static File updateMercurius(File libs, String mcversion)
     {
-        File target = Utils.updateMavenFile(libs, "net.minecraftforge", "Mercurius", mcversion);
+        String version = Utils.updateMavenVersion(libs, "net.minecraftforge", "Mercurius", mcversion);
+        File target = Utils.updateMavenFile(libs, "net.minecraftforge", "Mercurius", version);
 
         if (target == null)
             return null;
@@ -323,6 +333,10 @@ public class Utils
                 }
                 return null;
             }
+            else
+            {
+                LogHelper.info("Mercurius Jar contains all signed files! Continueing loading!");
+            }
         }
         catch (IOException e)
         {
@@ -331,6 +345,45 @@ public class Utils
         }
 
         return target;
+    }
+    private static String updateMavenVersion(File libs, String group, String artifact, String version)
+    {
+        File target = getMavenFile(libs, group, artifact, version);
+        File latestF = new File(target.getAbsoluteFile().getParentFile(), "latest_version.txt");
+        String fileVersion = version;
+
+        if (latestF.exists())
+        {
+            if (latestF.lastModified() < System.currentTimeMillis() - TIMEOUT)
+            {
+                fileVersion = Utils.readFile(latestF).replaceAll("\r?\n", "");
+                LogHelper.info("Version Number exists, but out of date, Updating");
+            }
+            else
+            {
+                version = Utils.readFile(latestF).replaceAll("\r?\n", "");
+                LogHelper.info("Version Number exists, Using it: " + version);
+                return version;
+            }
+        }
+
+        String remoteVersion = Utils.getMavenText(group, artifact, version, "build_num", ".txt");
+        if (fileVersion.equals(remoteVersion))
+        {
+            LogHelper.info("Remote version up to date: " + fileVersion);
+            version = fileVersion;
+        }
+        else
+        {
+            LogHelper.info("Remote version needs update. Old: " + version + " New: "+ remoteVersion);
+            writeFile(latestF, remoteVersion);
+            version = remoteVersion;
+        }
+
+        if (latestF.exists())
+            latestF.setLastModified(System.currentTimeMillis());
+
+        return version;
     }
     private static File updateMavenFile(File libs, String group, String artifact, String version)
     {
