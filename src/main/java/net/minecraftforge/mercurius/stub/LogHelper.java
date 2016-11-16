@@ -14,7 +14,7 @@ public class LogHelper {
             modID = "mercurius"; //Should never change, but we could ask the binding.
             logger = LogManager.getLogger(modID);
         }
-        logger.log(logLevel, "[" + modID + "] " + message);
+        logger.log(logLevel, /*"[" + modID + "] " +*/ message);
     }
 
     public static void all(String message) {

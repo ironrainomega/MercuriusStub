@@ -17,12 +17,20 @@ import java.net.URL;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.Certificate;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 public class Utils
 {
     private static final String FORGE_MAVEN = "http://files.minecraftforge.net/maven/"; //TODO: HTTPS
     private static final int BUFFER_SIZE = 4096;
     private static final int TIMEOUT = 24 * 60 * 60 * 1000;
+    private static final String FORGEFINGERPRINT = "E3:C3:D5:0C:7C:98:6D:F7:4C:64:5C:0A:C5:46:39:74:1C:90:A5:57".toLowerCase().replace(":", "");
 
     public static String downloadFile(String url, File target)
     {
@@ -253,7 +261,75 @@ public class Utils
 
     public static File updateMercurius(File libs, String mcversion)
     {
-        File target = updateMavenFile(libs, "net.minecraftforge", "Mercurius", mcversion);
+        File target = Utils.updateMavenFile(libs, "net.minecraftforge", "Mercurius", mcversion);
+
+        if (target == null)
+            return null;
+
+        try
+        {
+            JarFile jar = new JarFile(target);
+
+            byte[] buffer = new byte[BUFFER_SIZE];
+            for (JarEntry entry : Collections.list(jar.entries()))
+            {
+                //Signatures are lazy verified, so we need to make it read all entries in the jar to load up the data
+                InputStream input = jar.getInputStream(entry);
+                while (input.read(buffer) > 0);
+            }
+
+            List<String> invalid = new ArrayList<String>();
+
+            for (JarEntry entry : Collections.list(jar.entries()))
+            {
+                String name = entry.getName().toUpperCase(Locale.ENGLISH);
+                boolean isMetadata = name.endsWith(".SF")
+                                  || name.endsWith(".DSA")
+                                  || name.endsWith(".RSA");
+
+                name = entry.getName();
+
+                if (isMetadata || entry.isDirectory())
+                    continue;
+
+                Certificate[] certs = entry.getCertificates();
+                if (certs == null || certs[0] == null)
+                    invalid.add(name);
+                else
+                {
+                    try
+                    {
+                        MessageDigest md = MessageDigest.getInstance("SHA-1");
+                        String sig = Utils.bytesToHex(md.digest(certs[0].getEncoded()));
+                        if (!sig.equals(FORGEFINGERPRINT))
+                            invalid.add(name);
+                    }
+                    catch (Exception e)
+                    {
+                        invalid.add(name);
+                    }
+                }
+            }
+
+            closeSilently(jar);
+
+            if (invalid.size() > 0)
+            {
+                LogHelper.info("Mercurius Jar contains unsigned entries: ");
+                Collections.sort(invalid);
+                for (String entry : invalid)
+                {
+                    LogHelper.info("  " + entry);
+                }
+                return null;
+            }
+        }
+        catch (IOException e)
+        {
+            e.printStackTrace();
+            return null;
+        }
+
         return target;
     }
     private static File updateMavenFile(File libs, String group, String artifact, String version)

@@ -61,6 +61,11 @@ public class StatsModStub
         }
 
         File libFile = Utils.updateMercurius(librariesDir, ForgeVersion.mcVersion);
+        if (libFile == null)
+        {
+            LogHelper.fatal("Mercurius Updating failed");
+            return;
+        }
 
 
         URLClassLoader cl;
